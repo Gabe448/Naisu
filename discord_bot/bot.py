@@ -236,8 +236,8 @@ async def on_ready():
 
 # ── Mention handler ───────────────────────────────────────────────────────────
 
-_SUMMARY_PATH  = r"C:\Users\GabeG29\Downloads\SecondBrain\02-projects\trading-bot-learnings\SUMMARY.md"
-_CLAUDE_MD_PATH = r"C:\Users\GabeG29\Downloads\Trading-Bot\CLAUDE.md"
+_SUMMARY_PATH  = os.environ.get("SUMMARY_MD_PATH", "")
+_CLAUDE_MD_PATH = os.environ.get("CLAUDE_MD_PATH", "")
 
 def _read_file(path: str) -> str:
     try:
