@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NAISU · NEURAL TAPE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:        #0c0c0a;
+    --panel:     #111110;
+    --raised:    #181816;
+    --hover:     #161614;
+    --line:      #252522;
+    --line-soft: #1e1e1c;
+    --line-faint:#191917;
+    --ink:       #dedad0;
+    --ink-num:   #ece8dc;
+    --ink-mute:  #6b6b64;
+    --ink-faint: #4a4a44;
+    --ink-deep:  #2e2e2b;
+    --acc:       #c8943a;
+    --pos:       #4d7a55;
+    --neg:       #7a3535;
+    --flash:     #1e1c15;
+    --sep:       #2a2a26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:'IBM Plex Sans Condensed',system-ui,sans-serif;
+    font-size:12px; line-height:1.4;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace; color:var(--ink-num); font-feature-settings:"tnum" 1, "zero" 1;}
+  .mute{color:var(--ink-mute)}
+  .faint{color:var(--ink-faint)}
+  .pos{color:var(--pos)}
+  .neg{color:var(--neg)}
+  .acc{color:var(--acc)}
+  .label{font-family:'IBM Plex Sans Condensed',sans-serif; font-weight:500; text-transform:uppercase; letter-spacing:0.12em;}
+
+  body{ display:flex; flex-direction:column; height:100vh; overflow:hidden;}
+
+  /* HEADER */
+  .header{
+    height:36px; flex-shrink:0;
+    display:flex; align-items:stretch; gap:0;
+    border-bottom:1px solid var(--line);
+    background:var(--bg);
+  }
+  .header > div{ display:flex; align-items:center; padding:0 14px;}
+  .brand{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-num); letter-spacing:0.04em;
+  }
+  .brand .dot{ width:5px; height:5px; background:var(--acc); display:inline-block; margin-right:8px; vertical-align:middle;}
+  .brand .sub{ color:var(--ink-mute); margin-left:8px;}
+  .ticker{ flex:1; min-width:0; overflow:hidden; padding:0;}
+  .ticker-track{ display:flex; gap:0; min-width:max-content; animation: tk 80s linear infinite; height:36px; align-items:center;}
+  @keyframes tk { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .ticker-item{
+    display:flex; align-items:center; gap:8px; padding:0 14px; flex-shrink:0;
+    font-family:'IBM Plex Mono',monospace; font-size:11px;
+  }
+  .ticker-item .sym{ color:var(--ink); letter-spacing:0.02em;}
+  .ticker-sep{ color:var(--sep); padding:0 2px; font-family:'IBM Plex Mono',monospace; font-size:11px; align-self:center;}
+  .header-meta{ gap:0; padding:0;}
+  .header-meta > div{ padding:0 12px; display:flex; align-items:center; gap:8px; border-left:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink); letter-spacing:0.08em; text-transform:uppercase;}
+  .live-dot{ width:6px; height:6px; background:var(--pos); display:inline-block; animation: pulse 2s ease-in-out infinite;}
+  .offline-dot{ width:6px; height:6px; background:var(--neg); display:inline-block;}
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* GRID */
+  .grid{
+    flex:1; min-height:0;
+    display:grid;
+    grid-template-columns: 260px minmax(0,1fr) 240px;
+    grid-template-rows: minmax(0,1fr) minmax(0,1fr);
+    gap:0;
+  }
+  .panel{
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+    display:flex; flex-direction:column;
+    min-width:0; min-height:0;
+    transition: background 0.08s linear;
+    border-left: 2px solid transparent;
+  }
+  .panel:hover{ background:var(--hover); }
+  .panel.active{ border-left:2px solid var(--acc);}
+  .grid > .panel:nth-child(3n){ border-right:0;}
+
+  .panel-header{
+    height:26px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:0 12px;
+    border-bottom:1px solid var(--line);
+    font-family:'IBM Plex Sans Condensed',sans-serif; font-weight:500;
+    font-size:9px; color:var(--ink-faint);
+    text-transform:uppercase; letter-spacing:0.12em;
+  }
+  .panel-header .lhs{ display:flex; align-items:center; gap:8px;}
+  .panel-header .rhs{ font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--ink-mute); letter-spacing:0.1em;}
+  .panel-header .id{ color:var(--ink-deep);}
+  .header-dot{ width:5px; height:5px; background:var(--acc); display:inline-block;}
+
+  .panel-body{ flex:1; min-height:0; padding:10px 12px; overflow:hidden; display:flex; flex-direction:column;}
+
+  /* N-01 Market Pulse */
+  .pulse-grid{
+    display:grid; grid-template-columns: repeat(2, minmax(0,1fr));
+    gap:6px 18px;
+    flex:1; min-height:0;
+  }
+  .pulse-cell{
+    display:flex; justify-content:space-between; align-items:baseline;
+    border-bottom:1px solid var(--line-faint);
+    padding-bottom:3px;
+    transition: background 0s;
+  }
+  .pulse-cell .s{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--ink-mute); letter-spacing:0.08em; text-transform:uppercase;}
+  .pulse-cell .v{ font-family:'IBM Plex Mono',monospace; font-size:11px;}
+  .pulse-foot{
+    margin-top:8px; padding-top:6px;
+    border-top:1px solid var(--line-faint);
+    font-size:11px; color:var(--ink-num);
+  }
+  .flash{ background:var(--flash);}
+
+  /* N-02 Scan Engine */
+  .scan-wrap{ display:grid; grid-template-columns: 64px 1fr; gap:12px; align-items:center;}
+  .scan-rows{ display:flex; flex-direction:column; gap:8px;}
+  .scan-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; border-bottom:1px solid var(--line-faint); padding-bottom:5px;}
+  .scan-row .k{ font-family:'IBM Plex Sans Condensed',sans-serif; font-weight:500; font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase;}
+  .scan-row .v{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-num);}
+  .scan-foot{ margin-top:8px; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--acc); letter-spacing:0.12em; text-transform:uppercase;}
+
+  /* N-04 Open Positions table */
+  table.t{ width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:11px;}
+  table.t thead th{
+    text-align:left; font-weight:500; font-family:'IBM Plex Sans Condensed',sans-serif;
+    font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase;
+    padding:4px 8px 5px 0; border-bottom:1px solid var(--line);
+  }
+  table.t thead th.r{ text-align:right; padding:4px 0 5px 8px;}
+  table.t td{ padding:3px 8px 3px 0; border-bottom:1px solid var(--line-faint); color:var(--ink-num);}
+  table.t td.r{ text-align:right; padding:3px 0 3px 8px;}
+  table.t tr.active{ border-left: 2px solid var(--acc);}
+  table.t tr.active td:first-child{ padding-left:6px;}
+
+  /* N-05 Primary Tape */
+  .tape-block{
+    display:flex; flex-direction:column; gap:10px; flex:1; min-height:0;
+  }
+  .tape-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:14px;}
+  .tape-price{ font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:500; color:var(--ink-num); letter-spacing:-0.01em; line-height:1;}
+  .tape-delta{ font-family:'IBM Plex Mono',monospace; font-size:12px; margin-left:10px;}
+  .tape-sub{ font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase; text-align:right;}
+  .tape-chart{ width:100%; flex:1; min-height:0;}
+  .ohlcv{ display:flex; gap:18px; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase;}
+  .ohlcv .v{ color:var(--ink-num); margin-left:4px;}
+
+  /* mid-top: tape gets ~62%, positions ~38% */
+  .mid-top{ display:grid; grid-template-rows: minmax(0, 1.65fr) 1px minmax(0, 1fr); height:100%; min-height:0;}
+  #p-mid-top .panel-body > .mid-top > div:not(.mid-sep){ overflow:hidden; min-height:0;}
+  #p-right-bottom .panel-body > .right-bottom > div:not(.mid-sep){ overflow:hidden; min-height:0;}
+  .mid-top .mid-sep{ background:var(--line-soft);}
+
+  /* N-06 Strike Ladder */
+  .ladder{ display:flex; flex-direction:column; gap:4px; flex:1;}
+  .ladder-row{ display:grid; grid-template-columns: 56px 1fr 36px; gap:10px; align-items:center;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; line-height:1;}
+  .ladder-row .strike{ color:var(--ink-num);}
+  .ladder-row .bar{ height:8px; background:transparent; position:relative;}
+  .ladder-row .bar-fill{ position:absolute; left:0; top:0; bottom:0; background:var(--acc);}
+  .ladder-row.spot .strike{ color:var(--acc);}
+  .ladder-row .lbl{ font-family:'IBM Plex Sans Condensed',sans-serif; font-weight:500; font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase; text-align:right;}
+  .ladder-row.spot .lbl{ color:var(--acc);}
+  .ladder-row.call-wall .lbl{ color:var(--pos);}
+  .ladder-row.put-wall .lbl{ color:var(--neg);}
+
+  /* N-07 Signal Feed */
+  .feed{ display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden;}
+  .feed-row{
+    display:grid; grid-template-columns: 50px 50px 1fr; gap:10px; align-items:baseline;
+    padding:4px 0; border-bottom:1px solid var(--line-faint);
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+  }
+  .feed-row .ts{ color:var(--ink-mute);}
+  .feed-row .sym{ color:var(--ink-num);}
+  .feed-row .msg{ color:var(--ink); letter-spacing:0.04em; text-transform:uppercase;}
+  .feed-row .msg.long{ color:var(--pos);}
+  .feed-row .msg.short{ color:var(--neg);}
+
+  /* N-09 Closed */
+  .right-bottom{ display:grid; grid-template-rows: minmax(0,1fr) 1px minmax(0,1fr); height:100%; min-height:0;}
+  .right-bottom .mid-sep{ background:var(--line-soft);}
+
+  /* N-08 Top 10 */
+  .top10{
+    display:grid; grid-template-columns: 1fr 1fr; gap:0 24px; flex:1;
+  }
+  .top10 .col{ display:flex; flex-direction:column;}
+  .top10-row{
+    display:grid; grid-template-columns: 22px 1fr auto; gap:8px; align-items:baseline;
+    padding:3px 0; border-bottom:1px solid var(--line-faint);
+    font-family:'IBM Plex Mono',monospace; font-size:11px;
+  }
+  .top10-row .rank{ color:var(--ink-deep); font-size:10px;}
+  .top10-row .sym{ color:var(--ink-num);}
+
+  /* P&L donut row */
+  .pl-donut-wrap{
+    display:flex; align-items:center; gap:12px; padding-top:8px;
+    border-top:1px solid var(--line-soft); margin-top:8px;
+  }
+  .pl-num{ font-family:'IBM Plex Mono',monospace; font-size:18px; color:var(--ink-num); font-weight:500; letter-spacing:-0.01em; line-height:1;}
+  .pl-sub{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-mute); margin-top:4px;}
+
+  /* FOOTER */
+  .footer{
+    height:28px; flex-shrink:0;
+    display:flex; align-items:stretch;
+    border-top:1px solid var(--line);
+    background:var(--bg);
+  }
+  .footer > div{ display:flex; align-items:center; padding:0 14px;
+    font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; text-transform:uppercase;}
+  .footer .left{ flex:1;}
+  .footer .right{ display:flex; gap:0;}
+  .footer .right > span{ padding:0 12px; border-left:1px solid var(--line); height:28px; display:flex; align-items:center; gap:6px;}
+  .heart{ width:6px; height:6px; background:var(--pos); display:inline-block; animation: pulse 2s ease-in-out infinite;}
+  .heart-off{ width:6px; height:6px; background:var(--neg); display:inline-block;}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand"><span class="dot"></span>NAISU · NEURAL TAPE<span class="sub">// LIVE</span></div>
+  <div class="ticker"><div class="ticker-track" id="ticker-track"><span style="color:var(--ink-mute);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:0 14px;">LOADING MARKET DATA...</span></div></div>
+  <div class="header-meta">
+    <div id="bot-status-dot"><span class="offline-dot"></span> BOT</div>
+    <div>RTH</div>
+    <div id="session-clock">SESSION --:--:--</div>
+  </div>
+</header>
+
+<main class="grid">
+
+  <!-- N-01 Market Pulse -->
+  <section class="panel" id="p-pulse">
+    <div class="panel-header">
+      <div class="lhs"><span class="header-dot"></span><span class="id">N-01 ·</span> MARKET PULSE</div>
+      <div class="rhs" id="pulse-count">— SYM</div>
+    </div>
+    <div class="panel-body">
+      <div class="pulse-grid" id="pulse-grid">
+        <div class="pulse-cell"><span class="s">SPY</span><span class="v mute">—</span></div>
+        <div class="pulse-cell"><span class="s">QQQ</span><span class="v mute">—</span></div>
+        <div class="pulse-cell"><span class="s">VIX</span><span class="v mute">—</span></div>
+      </div>
+      <div class="pulse-foot" id="pulse-foot">Fetching market data…</div>
+    </div>
+  </section>
+
+  <!-- middle-top: N-05 + N-04 -->
+  <section class="panel" id="p-mid-top">
+    <div class="panel-header">
+      <div class="lhs"><span class="id">N-05 ·</span> PRIMARY TAPE — SPY <span style="color:var(--ink-deep); margin-left:14px;">/</span> <span class="id" style="margin-left:14px;">N-04 ·</span> OPEN POSITIONS</div>
+      <div class="rhs" id="tape-rhs">DAILY · MARK —</div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="mid-top">
+        <!-- N-05 -->
+        <div style="padding:12px; min-height:0; display:flex; flex-direction:column;" class="tape-block">
+          <div class="tape-head">
+            <div>
+              <span class="tape-price mono" id="tape-price">—</span>
+              <span class="tape-delta mono mute" id="tape-delta">— (—%)</span>
+            </div>
+            <div class="tape-sub">
+              <div>S&amp;P 500 ETF · NYSE</div>
+              <div style="margin-top:3px;" id="tape-meta">LOADING CHART…</div>
+            </div>
+          </div>
+          <svg class="tape-chart" id="tape-chart" viewBox="0 0 600 140" preserveAspectRatio="none"></svg>
+          <div class="ohlcv">
+            <div>O <span class="v" id="oh-o">—</span></div>
+            <div>H <span class="v" id="oh-h">—</span></div>
+            <div>L <span class="v" id="oh-l">—</span></div>
+            <div>C <span class="v" id="oh-c">—</span></div>
+          </div>
+        </div>
+        <div class="mid-sep"></div>
+        <!-- N-04 -->
+        <div style="padding:10px 12px; min-height:0; overflow:hidden;">
+          <table class="t">
+            <thead>
+              <tr><th>SYM</th><th>SIDE</th><th class="r">AGE</th><th class="r">ENTRY</th><th class="r">P&amp;L</th></tr>
+            </thead>
+            <tbody id="positions-body">
+              <tr><td colspan="5" style="color:var(--ink-mute); padding-top:8px;">No open positions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- N-06 Strike Ladder -->
+  <section class="panel" id="p-ladder">
+    <div class="panel-header">
+      <div class="lhs"><span class="id">N-06 ·</span> GEX LEVELS</div>
+      <div class="rhs" id="ladder-rhs">SPY</div>
+    </div>
+    <div class="panel-body">
+      <div class="ladder" id="ladder">
+        <div style="color:var(--ink-mute); font-family:'IBM Plex Mono',monospace; font-size:10px;">Loading levels…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- N-02 + N-03 -->
+  <section class="panel" id="p-scan">
+    <div class="panel-header">
+      <div class="lhs"><span class="id">N-02 ·</span> SCAN ENGINE <span style="color:var(--ink-deep); margin-left:14px;">/</span> <span class="id" style="margin-left:14px;">N-03 ·</span> WEEKLY P&amp;L</div>
+      <div class="rhs"><span id="scan-fired-hdr">—/15</span></div>
+    </div>
+    <div class="panel-body">
+      <div class="scan-wrap">
+        <svg width="78" height="78" viewBox="0 0 78 78">
+          <circle cx="39" cy="39" r="32" stroke="#1e1e1c" stroke-width="2" fill="none"/>
+          <circle id="scan-arc" cx="39" cy="39" r="32" stroke="#c8943a" stroke-width="2" fill="none"
+                  stroke-dasharray="201.06" stroke-dashoffset="201.06" transform="rotate(-90 39 39)" stroke-linecap="butt"/>
+          <text x="39" y="42" text-anchor="middle" fill="#ece8dc" font-family="IBM Plex Mono" font-size="11" id="scan-pct-txt">—</text>
+        </svg>
+        <div class="scan-rows">
+          <div class="scan-row"><span class="k">Next scan</span><span class="v" id="scan-next">—</span></div>
+          <div class="scan-row"><span class="k">Signals</span><span class="v" id="scan-fired-r">—</span></div>
+          <div class="scan-row"><span class="k">Interval</span><span class="v">10m</span></div>
+        </div>
+      </div>
+      <div class="scan-foot" id="scan-foot">BOT OFFLINE</div>
+
+      <!-- N-03 P&L -->
+      <div class="pl-donut-wrap">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="24" stroke="#1e1e1c" stroke-width="3" fill="none"/>
+          <g id="pl-donut"></g>
+          <text x="32" y="35" text-anchor="middle" fill="#ece8dc" font-family="IBM Plex Mono" font-size="9" id="pl-pct-txt">—%</text>
+        </svg>
+        <div>
+          <div class="pl-num" id="pl-num">—</div>
+          <div class="pl-sub" id="pl-sub">— trades this week</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- N-08 Top 10 -->
+  <section class="panel" id="p-top">
+    <div class="panel-header">
+      <div class="lhs"><span class="id">N-08 ·</span> TOP SCANNER</div>
+      <div class="rhs">SCORE DESC <span id="top-count" style="margin-left:6px;">—</span></div>
+    </div>
+    <div class="panel-body">
+      <div class="top10" id="top10">
+        <div class="col" style="color:var(--ink-mute); font-family:'IBM Plex Mono',monospace; font-size:10px;">Loading…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- N-07 + N-09 -->
+  <section class="panel" id="p-right-bottom">
+    <div class="panel-header">
+      <div class="lhs"><span class="id">N-07 ·</span> SIGNAL FEED <span style="color:var(--ink-deep); margin-left:14px;">/</span> <span class="id" style="margin-left:14px;">N-09 ·</span> CLOSED</div>
+      <div class="rhs"><span class="acc" id="signals-today">— TODAY</span></div>
+    </div>
+    <div class="panel-body" style="padding:0;">
+      <div class="right-bottom">
+        <div style="padding:10px 12px; min-height:0; overflow:hidden;">
+          <div class="feed" id="feed">
+            <div style="color:var(--ink-mute); font-family:'IBM Plex Mono',monospace; font-size:10px; padding:4px 0;">No signals yet</div>
+          </div>
+        </div>
+        <div class="mid-sep"></div>
+        <div style="padding:10px 12px; min-height:0; overflow:hidden;">
+          <table class="t">
+            <thead>
+              <tr><th>SYM</th><th>L/S</th><th class="r">ENTRY → EXIT</th><th class="r">P&amp;L</th></tr>
+            </thead>
+            <tbody id="closed-body">
+              <tr><td colspan="4" style="color:var(--ink-mute); padding-top:8px;">No closed trades</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="left">NAISU // NEURAL-TAPE // TRADING BOT DASHBOARD</div>
+  <div class="right">
+    <span><span class="heart" id="feed-health"></span> <span id="feed-status">FEED OK</span></span>
+    <span>UPDATED <span id="last-update">—</span></span>
+    <span id="bot-uptime">BOT OFFLINE</span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const fmt = (n, dp=2) => n.toLocaleString('en-US',{minimumFractionDigits:dp, maximumFractionDigits:dp});
+  const pad = (n,w=2) => String(n).padStart(w,'0');
+  const sign = (n) => (n>=0?'+':'') + fmt(n);
+  const signPct = (n) => (n>=0?'+':'') + n.toFixed(2) + '%';
+
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  function tickClock() {
+    const now = new Date();
+    $('#session-clock').textContent = `SESSION ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  // ── Market (N-01) ──────────────────────────────────────────────────────────
+  let marketSyms = [];
+  async function fetchMarket() {
+    try {
+      const r = await fetch('/api/market');
+      const d = await r.json();
+      const entries = [];
+      for (const [sym, data] of Object.entries(d)) {
+        if (sym === 'updated_at') continue;
+        if (data.price == null) continue;
+        entries.push({ s: sym, p: data.price, ch: data.change_pct ?? 0 });
+      }
+      marketSyms = entries;
+      renderMarketPulse(entries);
+      renderTicker(entries);
+      $('#pulse-foot').textContent = `Updated ${d.updated_at || '—'}`;
+    } catch(e) {
+      $('#pulse-foot').textContent = 'Market data unavailable';
+    }
+  }
+
+  function renderMarketPulse(entries) {
+    const grid = $('#pulse-grid');
+    grid.innerHTML = entries.map(x => {
+      const cls = x.ch >= 0 ? 'pos' : 'neg';
+      const px = x.s === 'VIX' ? x.p.toFixed(2) : '$' + fmt(x.p);
+      return `<div class="pulse-cell">
+        <span class="s">${x.s}</span>
+        <span class="v ${cls}">${px} <span style="font-size:9px;">${signPct(x.ch)}</span></span>
+      </div>`;
+    }).join('');
+    $('#pulse-count').textContent = `${entries.length} SYM`;
+  }
+
+  function renderTicker(entries) {
+    const sep = '<span class="ticker-sep">|</span>';
+    const items = entries.map(x => {
+      const cls = x.ch >= 0 ? 'pos' : 'neg';
+      return `<div class="ticker-item">
+        <span class="sym">${x.s}</span>
+        <span class="mono ${cls}">${signPct(x.ch)}</span>
+      </div>`;
+    }).join(sep);
+    const track = $('#ticker-track');
+    track.innerHTML = items + sep + items;
+  }
+
+  // ── Chart / Tape (N-05 + N-06) ────────────────────────────────────────────
+  async function fetchChart(ticker = 'SPY') {
+    try {
+      const r = await fetch(`/api/chart/${ticker}`);
+      const d = await r.json();
+      if (!d.candles || d.candles.length === 0) return;
+
+      const candles = d.candles.slice(-70);
+      const last = candles[candles.length - 1];
+      const first = candles[0];
+
+      // Price display
+      $('#tape-price').textContent = '$' + fmt(last.close);
+      const ch = last.close - first.open;
+      const pct = (ch / first.open) * 100;
+      const dEl = $('#tape-delta');
+      dEl.textContent = (ch >= 0 ? '▲ ' : '▼ ') + fmt(Math.abs(ch)) + ' (' + signPct(pct) + ')';
+      dEl.className = 'tape-delta mono ' + (ch >= 0 ? 'pos' : 'neg');
+
+      $('#oh-o').textContent = fmt(first.open);
+      const allH = candles.map(c => c.high);
+      const allL = candles.map(c => c.low);
+      $('#oh-h').textContent = fmt(Math.max(...allH));
+      $('#oh-l').textContent = fmt(Math.min(...allL));
+      $('#oh-c').textContent = fmt(last.close);
+      $('#tape-meta').textContent = `${candles.length}D DATA · DAILY`;
+
+      const now = new Date();
+      $('#tape-rhs').textContent = `DAILY · MARK ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+      drawCandles(candles);
+      renderLadder(d.gex_levels || [], d.gex_flip, last.close);
+    } catch(e) {}
+  }
+
+  function drawCandles(candles) {
+    const svg = $('#tape-chart');
+    const W = 600, H = 140, pl = 4, pr = 6, pt = 6, pb = 6;
+    const all = candles.flatMap(k => [k.high, k.low]);
+    const min = Math.min(...all), max = Math.max(...all);
+    const yS = v => pt + (1 - (v - min) / (max - min)) * (H - pt - pb);
+    const innerW = W - pl - pr;
+    const cw = innerW / candles.length;
+    const bw = 4;
+    let html = '';
+    const midV = (min + max) / 2;
+    html += `<line x1="${pl}" y1="${yS(midV)}" x2="${W-pr}" y2="${yS(midV)}" stroke="#1a1a18" stroke-width="1"/>`;
+    candles.forEach((k, i) => {
+      const x = pl + i * cw + cw / 2;
+      const up = k.close >= k.open;
+      const color = up ? '#4d7a55' : '#7a3535';
+      html += `<line x1="${x}" y1="${yS(k.high)}" x2="${x}" y2="${yS(k.low)}" stroke="${color}" stroke-width="1"/>`;
+      const yo = yS(k.open), yc = yS(k.close);
+      html += `<rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1, Math.abs(yc-yo))}" fill="${color}"/>`;
+    });
+    svg.innerHTML = html;
+  }
+
+  function renderLadder(gexLevels, flipLevel, spot) {
+    const ladderEl = $('#ladder');
+    if (!gexLevels || gexLevels.length === 0) {
+      // Fallback: show spot with placeholder levels
+      const strikes = [];
+      const base = Math.round(spot / 5) * 5;
+      for (let i = 4; i >= -4; i--) {
+        const k = base + i * 5;
+        strikes.push({ k, lbl: i === 0 ? 'SPOT' : (i > 0 ? `CW${i}` : `PW${Math.abs(i)}`), spot: i === 0 });
+      }
+      ladderEl.innerHTML = strikes.map(s => {
+        const d = Math.abs(s.k - spot);
+        const op = s.spot ? 1 : Math.max(0.18, 1 - d / spot * 10);
+        const w = (s.spot ? 96 : Math.max(28, 92 - d / spot * 200)) + '%';
+        return `<div class="ladder-row ${s.spot ? 'spot' : ''}">
+          <span class="strike">$${s.k}</span>
+          <span class="bar"><span class="bar-fill" style="width:${w}; opacity:${op}"></span></span>
+          <span class="lbl">${s.lbl}</span>
+        </div>`;
+      }).join('');
+      return;
+    }
+
+    // Sort GEX levels descending
+    const sorted = [...gexLevels].sort((a, b) => b.price - a.price);
+    const allPrices = sorted.map(l => l.price).concat([spot]);
+    const maxP = Math.max(...allPrices);
+    const minP = Math.min(...allPrices);
+    const range = maxP - minP || 1;
+
+    ladderEl.innerHTML = sorted.map(l => {
+      const isSpot = Math.abs(l.price - spot) < 1;
+      const pct = ((l.price - minP) / range * 80 + 10).toFixed(0) + '%';
+      const typeLabel = l.type === 'call_wall' ? 'CW' : l.type === 'put_wall' ? 'PW' : l.type;
+      const typeClass = l.type === 'call_wall' ? 'call-wall' : l.type === 'put_wall' ? 'put-wall' : '';
+      return `<div class="ladder-row ${isSpot ? 'spot' : typeClass}">
+        <span class="strike">$${l.price}</span>
+        <span class="bar"><span class="bar-fill" style="width:${pct}"></span></span>
+        <span class="lbl">${typeLabel}</span>
+      </div>`;
+    }).join('');
+
+    $('#ladder-rhs').textContent = `SPY · GEX`;
+  }
+
+  // ── Bot Status / Scan Engine (N-02) ───────────────────────────────────────
+  let nextScanSec = null;
+  let scanInterval = 600;
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const d = await r.json();
+      const running = d.is_running;
+
+      // Bot indicator
+      const dot = $('#bot-status-dot');
+      dot.innerHTML = running
+        ? `<span class="live-dot"></span> BOT`
+        : `<span class="offline-dot"></span> BOT`;
+
+      // Scan countdown
+      nextScanSec = d.next_scan_seconds ?? null;
+      const fired = d.signal_count_this_week ?? 0;
+      const maxSig = d.max_signals_per_week ?? 15;
+
+      $('#scan-fired-hdr').textContent = `${fired}/${maxSig}`;
+      $('#scan-fired-r').textContent = `${fired}/${maxSig}`;
+      $('#scan-foot').textContent = running ? 'BOT ACTIVE — 412 SYMBOLS' : 'BOT OFFLINE';
+
+      $('#bot-uptime').textContent = running
+        ? `LAST SCAN ${d.last_scan ? new Date(d.last_scan).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'}) : '—'}`
+        : 'BOT OFFLINE';
+
+      updateScanArc();
+    } catch(e) {}
+  }
+
+  function updateScanArc() {
+    if (nextScanSec == null) return;
+    const pct = Math.max(0, Math.min(100, (1 - nextScanSec / scanInterval) * 100));
+    const C = 201.06;
+    $('#scan-arc').setAttribute('stroke-dashoffset', C - (pct / 100) * C);
+    $('#scan-pct-txt').textContent = Math.floor(pct) + '%';
+    const m = Math.floor(nextScanSec / 60), s = nextScanSec % 60;
+    $('#scan-next').textContent = `${m}:${pad(s)}`;
+  }
+
+  // Countdown locally between fetches
+  setInterval(() => {
+    if (nextScanSec != null && nextScanSec > 0) {
+      nextScanSec--;
+      updateScanArc();
+    }
+  }, 1000);
+
+  // ── Scorecard / P&L (N-03) ────────────────────────────────────────────────
+  async function fetchScorecard() {
+    try {
+      const r = await fetch('/api/scorecard');
+      const d = await r.json();
+      const trades = d.trades ?? 0;
+      const wins = d.wins ?? 0;
+      const winRate = d.win_rate ?? (trades > 0 ? (wins / trades) * 100 : 0);
+      const totalPnl = d.total_pnl ?? 0;
+      const label = trades === 0 ? 'no closed trades' : `${winRate.toFixed(0)}% win · ${trades} trades`;
+
+      $('#pl-num').textContent = trades === 0 ? '—' : ((totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + '%');
+      $('#pl-sub').textContent = label;
+      $('#pl-pct-txt').textContent = Math.round(winRate) + '%';
+
+      // Donut
+      const cx = 32, cy = 32, r = 24;
+      const C2 = 2 * Math.PI * r;
+      const winFrac = trades > 0 ? wins / trades : 0;
+      const loseFrac = 1 - winFrac;
+      const winDash = winFrac * C2;
+      const loseStart = winFrac * C2;
+      $('#pl-donut').innerHTML = trades === 0 ? '' : `
+        <circle cx="${cx}" cy="${cy}" r="${r}" stroke="#4d7a55" stroke-width="3" fill="none"
+          stroke-dasharray="${winDash} ${C2-winDash}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" stroke="#7a3535" stroke-width="3" fill="none"
+          stroke-dasharray="${loseFrac*C2} ${C2-loseFrac*C2}" stroke-dashoffset="${-loseStart}" transform="rotate(-90 ${cx} ${cy})"/>
+      `;
+    } catch(e) {}
+  }
+
+  // ── Positions (N-04 + N-09) ───────────────────────────────────────────────
+  async function fetchPositions() {
+    try {
+      const r = await fetch('/api/positions');
+      const d = await r.json();
+      renderOpenPositions(d.open || []);
+      renderClosedPositions(d.closed || []);
+    } catch(e) {}
+  }
+
+  function renderOpenPositions(positions) {
+    if (positions.length === 0) {
+      $('#positions-body').innerHTML = `<tr><td colspan="5" style="color:var(--ink-mute); padding-top:8px;">No open positions</td></tr>`;
+      return;
+    }
+    $('#positions-body').innerHTML = positions.map((r, i) => {
+      const isLong = r.direction === 'long' || r.direction === 'L';
+      const entry = r.entry_price ?? 0;
+      const current = r.current_price ?? entry;
+      const plPct = r.pnl_pct ?? (isLong ? (current - entry) / entry * 100 : (entry - current) / entry * 100);
+      const plCls = plPct >= 0 ? 'pos' : 'neg';
+      const sideCls = isLong ? 'pos' : 'neg';
+      const sideTxt = isLong ? 'LONG' : 'SHORT';
+      return `<tr class="${i === 0 ? 'active' : ''}">
+        <td>${r.ticker || '—'}</td>
+        <td class="${sideCls}">${sideTxt}</td>
+        <td class="r">${r.days_held ?? 0}d</td>
+        <td class="r">${fmt(entry)}</td>
+        <td class="r ${plCls}">${plPct >= 0 ? '+' : ''}${plPct.toFixed(2)}%</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderClosedPositions(positions) {
+    if (positions.length === 0) {
+      $('#closed-body').innerHTML = `<tr><td colspan="4" style="color:var(--ink-mute); padding-top:8px;">No closed trades</td></tr>`;
+      return;
+    }
+    $('#closed-body').innerHTML = positions.map(r => {
+      const isLong = r.direction === 'long' || r.direction === 'L';
+      const sideCls = isLong ? 'pos' : 'neg';
+      const sideChar = isLong ? 'L' : 'S';
+      const plPct = r.final_pnl_pct ?? 0;
+      const cls = plPct >= 0 ? 'pos' : 'neg';
+      const entry = r.entry_price ?? 0;
+      const exit = r.exit_price ?? 0;
+      return `<tr>
+        <td>${r.ticker || '—'}</td>
+        <td class="${sideCls}">${sideChar}</td>
+        <td class="r mono">${fmt(entry)}<span style="color:var(--ink-deep); padding:0 4px;">→</span>${fmt(exit)}</td>
+        <td class="r ${cls}">${plPct >= 0 ? '+' : ''}${plPct.toFixed(2)}%</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Signals (N-07) ────────────────────────────────────────────────────────
+  async function fetchSignals() {
+    try {
+      const r = await fetch('/api/signals');
+      const signals = await r.json();
+      renderFeed(signals);
+      const today = signals.filter(s => {
+        if (!s.posted_at) return false;
+        const d = new Date(s.posted_at);
+        const now = new Date();
+        return d.toDateString() === now.toDateString();
+      }).length;
+      $('#signals-today').textContent = `${today} TODAY`;
+    } catch(e) {}
+  }
+
+  function renderFeed(signals) {
+    if (!signals || signals.length === 0) {
+      $('#feed').innerHTML = `<div style="color:var(--ink-mute); font-family:'IBM Plex Mono',monospace; font-size:10px; padding:4px 0;">No signals yet</div>`;
+      return;
+    }
+    $('#feed').innerHTML = signals.slice(0, 7).map(s => {
+      const isLong = s.direction === 'long' || s.direction === 'LONG' || s.direction === 'L';
+      const cls = isLong ? 'long' : 'short';
+      const msg = s.thesis ? s.thesis.slice(0, 24).toUpperCase() : (isLong ? 'LONG SIGNAL' : 'SHORT SIGNAL');
+      const ts = s.posted_at ? new Date(s.posted_at).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false}) : '—';
+      return `<div class="feed-row">
+        <span class="ts">${ts}</span>
+        <span class="sym">${s.ticker || '—'}</span>
+        <span class="msg ${cls}">${msg}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Watchlist / Top 10 (N-08 + N-01 extra) ───────────────────────────────
+  async function fetchWatchlist() {
+    try {
+      const r = await fetch('/api/watchlist');
+      const candidates = await r.json();
+      renderTop10(candidates);
+
+      // Also add watchlist symbols to ticker if market data is sparse
+      if (marketSyms.length < 4 && candidates.length > 0) {
+        const extra = candidates.slice(0, 6).map(c => ({
+          s: c.ticker,
+          p: c.price ?? 0,
+          ch: c.momentum_10d ?? 0
+        }));
+        renderTicker([...marketSyms, ...extra]);
+      }
+    } catch(e) {}
+  }
+
+  function renderTop10(candidates) {
+    const sorted = [...candidates].sort((a, b) => (b.yf_score ?? 0) - (a.yf_score ?? 0)).slice(0, 10);
+    $('#top-count').textContent = `${sorted.length} SYM`;
+
+    if (sorted.length === 0) {
+      $('#top10').innerHTML = `<div class="col" style="color:var(--ink-mute); font-family:'IBM Plex Mono',monospace; font-size:10px;">No candidates yet</div>`;
+      return;
+    }
+
+    const rows = sorted.map((c, i) => {
+      const score = c.yf_score ?? 0;
+      const mom = c.momentum_10d ?? 0;
+      const cls = mom >= 0 ? 'pos' : 'neg';
+      return `<div class="top10-row">
+        <span class="rank">${pad(i+1)}</span>
+        <span class="sym">${c.ticker}</span>
+        <span class="${cls}">${signPct(mom)}</span>
+      </div>`;
+    });
+
+    const half = Math.ceil(sorted.length / 2);
+    $('#top10').innerHTML =
+      `<div class="col">${rows.slice(0, half).join('')}</div><div class="col">${rows.slice(half).join('')}</div>`;
+  }
+
+  // ── Footer health ──────────────────────────────────────────────────────────
+  function updateHealth(ok) {
+    const el = $('#feed-health');
+    const st = $('#feed-status');
+    if (ok) {
+      el.className = 'heart';
+      st.textContent = 'FEED OK';
+    } else {
+      el.className = 'heart-off';
+      st.textContent = 'FEED ERR';
+    }
+    const now = new Date();
+    $('#last-update').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+
+  // ── Polling orchestration ──────────────────────────────────────────────────
+  async function refreshAll() {
+    try {
+      await Promise.all([
+        fetchMarket(),
+        fetchStatus(),
+        fetchScorecard(),
+        fetchPositions(),
+        fetchSignals(),
+        fetchWatchlist(),
+      ]);
+      await fetchChart('SPY');
+      updateHealth(true);
+    } catch(e) {
+      updateHealth(false);
+    }
+  }
+
+  // Initial load
+  refreshAll();
+
+  // Refresh intervals
+  setInterval(fetchStatus,    10_000);   // bot status every 10s
+  setInterval(fetchSignals,   15_000);   // signals every 15s
+  setInterval(fetchPositions, 20_000);   // positions every 20s
+  setInterval(fetchMarket,    60_000);   // market data every 60s
+  setInterval(fetchWatchlist, 60_000);   // watchlist every 60s
+  setInterval(fetchScorecard, 60_000);   // scorecard every 60s
+  setInterval(() => fetchChart('SPY'), 120_000); // chart every 2m
+})();
+</script>
+</body>
+</html>
