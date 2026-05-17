@@ -225,7 +225,7 @@ async def on_ready():
             )
             await channel.send(
                 f"**JC Claude Analyst Online**\n"
-                f"Scan: every 10min | Top 50 candidates → Claude decides\n"
+                f"Scan: every 30min | Top 20 candidates → Claude decides\n"
                 f"Hard limits: market open, no trading 30min ±macro, max {MAX_CONCURRENT_POSITIONS} concurrent positions\n"
                 f"Upcoming macro events: {macro_str}"
             )
@@ -369,7 +369,7 @@ async def on_message(message: discord.Message) -> None:
 
 # ── Scheduled tasks ───────────────────────────────────────────────────────────
 
-@tasks.loop(minutes=10, reconnect=True)
+@tasks.loop(minutes=30, reconnect=True)
 async def market_scan():
     """
     Every 10 min during market hours:
@@ -532,8 +532,8 @@ async def market_scan():
 
 @market_scan.before_loop
 async def before_market_scan():
-    """Wait 10 min before the first scan so startup doesn't immediately burn credits."""
-    await asyncio.sleep(600)
+    """Wait 30 min before the first scan so startup doesn't immediately burn credits."""
+    await asyncio.sleep(1800)
 
 
 @tasks.loop(minutes=10)
@@ -716,7 +716,7 @@ async def signal_cmd(ctx, ticker: str):
 @bot.command(name="scan")
 async def scan_cmd(ctx):
     """!scan — run full pipeline, post the top trade from Claude's analysis."""
-    await ctx.send("Running full S&P 500 scan (top 50 → Claude)... ~30 sec")
+    await ctx.send("Running full S&P 500 scan (top 20 → Claude)... ~30 sec")
     try:
         in_window, event_name = is_macro_window()
         if in_window:
