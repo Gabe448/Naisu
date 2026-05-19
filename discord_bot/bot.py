@@ -236,8 +236,7 @@ async def on_ready():
 
 # ── Mention handler ───────────────────────────────────────────────────────────
 
-_SUMMARY_PATH  = os.environ.get("SUMMARY_MD_PATH", "")
-_CLAUDE_MD_PATH = os.environ.get("CLAUDE_MD_PATH", "")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _read_file(path: str) -> str:
     try:
@@ -246,8 +245,12 @@ def _read_file(path: str) -> str:
     except Exception:
         return ""
 
-_TRADE_SUMMARY = _read_file(_SUMMARY_PATH)
-_CLAUDE_MD     = _read_file(_CLAUDE_MD_PATH)
+_TRADE_SUMMARY = _read_file(
+    os.environ.get("SUMMARY_MD_PATH") or os.path.join(_REPO_ROOT, "context", "summary.md")
+)
+_CLAUDE_MD = _read_file(
+    os.environ.get("CLAUDE_MD_PATH") or os.path.join(_REPO_ROOT, "context", "project.md")
+)
 
 _MENTION_SYSTEM = (
     "You are Naisu, a swing trading assistant. You only discuss trading — stocks, options, GEX/DEX, "
