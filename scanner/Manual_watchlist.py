@@ -11,17 +11,11 @@ HOW TO USE:
 """
 
 MANUAL_WATCHLIST: list[str] = [
-    "SPY",
-    "GOOGL",
-    "AAPL",
     "TSLA",
-    "NBIS",
-    "AMZN",
+    "NVDA",
+    "AAPL",
     "META",
-    "DELL",
-    "PLTR",
-    "PANW",
-    # Add more tickers below this line:
+    "AMZN",
 ]
 
 

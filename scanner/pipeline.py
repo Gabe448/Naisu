@@ -21,7 +21,7 @@ from scanner.yf_scanner import batch_scan
 import data.yf_client as _yfc
 from analysis.gex_analysis import analyze_exposure, extract_dex_bias
 
-PIPELINE_TOP_N = int(os.environ.get("PIPELINE_TOP_N", 10))
+PIPELINE_TOP_N = int(os.environ.get("PIPELINE_TOP_N", 5))
 _pipeline_lf_blocked_until = 0.0   # module-level rate limit guard
 
 
