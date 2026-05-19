@@ -449,70 +449,74 @@ async def market_scan():
     except Exception:
         pass
 
-    # Analyze candidates in tiered batches: top 10, then 11-20, then 21-30.
-    # Stop advancing to the next batch as soon as any trade is found.
     eligible = [
         c for c in candidates
         if c["ticker"] not in _signals_this_week and not _has_open_position(c["ticker"])
     ]
 
+    tickers_str = " | ".join(c["ticker"] for c in eligible)
+    spy = market_ctx.get("spy", {})
+    await channel.send(
+        f"🔍 **Scan** — SPY ${spy.get('price', 0):.2f} {spy.get('gex_regime','?').upper()} GEX | "
+        f"VIX {market_ctx.get('vix', 0):.1f} | Regime: {market_ctx.get('regime','?')}\n"
+        f"Analyzing: `{tickers_str}`"
+    )
+
+    results = []   # (ticker, action, confidence, thesis_snippet)
     trade_found = False
-    for batch_start in range(0, 30, 10):
-        batch = eligible[batch_start : batch_start + 10]
-        if not batch:
+
+    for candidate in eligible:
+        ticker = candidate["ticker"]
+
+        if _position_count() >= MAX_CONCURRENT_POSITIONS:
+            break
+        in_window, event_name = is_macro_window()
+        if in_window:
             break
 
-        print(
-            f"[market_scan] Claude batch {batch_start//10 + 1}: "
-            f"ranks {batch_start+1}-{batch_start+len(batch)} "
-            f"({[c['ticker'] for c in batch]})",
-            flush=True,
-        )
+        try:
+            decision = await loop.run_in_executor(
+                None, analyze_candidate, candidate, market_ctx, candidate.get("scan_rank", 0)
+            )
+        except Exception as e:
+            print(f"[market_scan] Claude analysis failed for {ticker}: {e}", flush=True)
+            results.append((ticker, "error", 0, str(e)[:80]))
+            continue
 
-        for candidate in batch:
-            ticker = candidate["ticker"]
+        if not decision:
+            results.append((ticker, "error", 0, "no response"))
+            continue
 
-            if _position_count() >= MAX_CONCURRENT_POSITIONS:
-                print(f"[market_scan] Position limit reached mid-scan. Stopping.", flush=True)
-                trade_found = True  # force stop
-                break
-            in_window, event_name = is_macro_window()
-            if in_window:
-                print(f"[market_scan] Macro window hit mid-scan: {event_name}. Stopping.", flush=True)
-                trade_found = True  # force stop
-                break
+        action     = decision.get("decision", "skip")
+        confidence = decision.get("confidence", 0)
+        thesis     = (decision.get("thesis") or "")[:80]
+        results.append((ticker, action, confidence, thesis))
 
-            try:
-                decision = await loop.run_in_executor(
-                    None, analyze_candidate, candidate, market_ctx, candidate.get("scan_rank", 0)
-                )
-            except Exception as e:
-                print(f"[market_scan] Claude analysis failed for {ticker}: {e}", flush=True)
-                continue
+        if action == "trade":
+            trade_found = True
+            await _post_signal(channel, decision, candidate)
+            if _signal_count_this_week >= MAX_SIGNALS_PER_WEEK:
+                await channel.send(f"**Weekly signal cap ({MAX_SIGNALS_PER_WEEK}) reached. Resetting Monday.**")
 
-            if not decision:
-                continue
-
-            action = decision.get("decision")
-
-            if action == "trade":
-                trade_found = True
-                await _post_signal(channel, decision, candidate)
-                if _signal_count_this_week >= MAX_SIGNALS_PER_WEEK:
-                    await channel.send(
-                        f"**Weekly signal cap ({MAX_SIGNALS_PER_WEEK}) reached. Resetting Monday.**"
-                    )
-
-            elif action == "watch":
-                if ticker not in get_watchlist():
-                    add_ticker(ticker)
-                    print(f"[market_scan] Watch added silently: {ticker}", flush=True)
+        elif action == "watch":
+            if ticker not in get_watchlist():
+                add_ticker(ticker)
 
         if trade_found or _signal_count_this_week >= MAX_SIGNALS_PER_WEEK:
-            print(f"[market_scan] Trade found in batch {batch_start//10 + 1} — stopping scan.", flush=True)
             break
 
-        print(f"[market_scan] No trade in batch {batch_start//10 + 1} — advancing to next 10.", flush=True)
+    # Post compact results summary
+    icons = {"trade": "🟢", "watch": "👁", "skip": "⬜", "error": "❌"}
+    lines = []
+    for ticker, action, conf, thesis in results:
+        icon = icons.get(action, "⬜")
+        lines.append(f"{icon} **{ticker}** {action.upper()} {conf}/100 — {thesis}")
+
+    if lines:
+        summary = "\n".join(lines)
+        if not trade_found:
+            summary += "\n\n_No trade taken this scan._"
+        await channel.send(summary[:2000])
 
     # ── Manual watchlist scan ────────────────────────────────────────────────
     if _position_count() >= MAX_CONCURRENT_POSITIONS or _signal_count_this_week >= MAX_SIGNALS_PER_WEEK:

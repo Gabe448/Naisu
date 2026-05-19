@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Claude Code local settings (may contain tokens)
+.claude/
+
 # Live state (not for version control)
 positions.json
 dashboard_state.json
