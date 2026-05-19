@@ -250,17 +250,21 @@ _TRADE_SUMMARY = _read_file(_SUMMARY_PATH)
 _CLAUDE_MD     = _read_file(_CLAUDE_MD_PATH)
 
 _MENTION_SYSTEM = (
-    "You are Naisu, a swing trading assistant built by Cons. "
-    "You have deep knowledge of his personal trading rulebook and project context (below). "
-    "Answer questions directly — 2-3 sentences max unless a list is genuinely clearer. "
-    "No filler, no pleasantries. Reference specific rules when relevant.\n\n"
+    "You are Naisu, a swing trading assistant. You only discuss trading — stocks, options, GEX/DEX, "
+    "technical analysis, risk management, market structure, and related topics. "
+    "If asked about anything unrelated to trading, politely decline and redirect to trading. "
+    "Be direct and conversational. No filler. Reference the rulebook when relevant.\n\n"
     "=== TRADING RULEBOOK ===\n"
-    + _TRADE_SUMMARY
+    + (_TRADE_SUMMARY or "(no rulebook loaded)")
     + "\n=== END RULEBOOK ===\n\n"
-    "=== PROJECT CONTEXT (CLAUDE.md) ===\n"
-    + _CLAUDE_MD
+    "=== PROJECT CONTEXT ===\n"
+    + (_CLAUDE_MD or "(no project context loaded)")
     + "\n=== END PROJECT CONTEXT ==="
 )
+
+# Per-channel conversation history — in-memory, max 20 messages (10 turns) per channel
+_chat_history: dict[int, list[dict]] = {}
+_CHAT_MAX_MESSAGES = 20
 
 _mention_client: _anthropic.Anthropic | None = None
 
@@ -340,22 +344,37 @@ async def on_message(message: discord.Message) -> None:
     async with message.channel.typing():
         loop = asyncio.get_event_loop()
         try:
-            context   = await loop.run_in_executor(None, _build_mention_context)
-            user_text = f"Context:\n{context}\n\nQuestion: {question}"
             _MENTION_MODEL = "claude-haiku-4-5-20251001"
+
+            # Prepend live context (positions + market) to the user's message
+            context   = await loop.run_in_executor(None, _build_mention_context)
+            user_text = f"[Live context]\n{context}\n\n{question}" if context else question
+
+            # Build history for this channel
+            channel_id = message.channel.id
+            history = _chat_history.setdefault(channel_id, [])
+            history.append({"role": "user", "content": user_text})
+
             _rl_acquire("on_message(mention)")
-            response  = await loop.run_in_executor(
+            response = await loop.run_in_executor(
                 None,
                 lambda: _get_mention_client().messages.create(
                     model      = _MENTION_MODEL,
-                    max_tokens = 150,
+                    max_tokens = 600,
                     system     = _MENTION_SYSTEM,
-                    messages   = [{"role": "user", "content": user_text}],
+                    messages   = history,
                 ),
             )
             _rl_log("on_message(mention)", _MENTION_MODEL,
                     response.usage.input_tokens, response.usage.output_tokens)
+
             reply = response.content[0].text.strip()
+
+            # Store assistant reply and trim history
+            history.append({"role": "assistant", "content": reply})
+            if len(history) > _CHAT_MAX_MESSAGES:
+                _chat_history[channel_id] = history[-_CHAT_MAX_MESSAGES:]
+
             print(f"[bot] Mention reply: {reply!r}", flush=True)
         except RuntimeError as e:
             reply = f"Rate limit: {e}"
