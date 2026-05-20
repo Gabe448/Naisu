@@ -92,7 +92,7 @@ def get_market_context() -> dict:
         from analysis.gex_analysis import analyze_exposure, extract_dex_bias
         import yfinance as yf
 
-        context = {"spy": {}, "qqq": {}, "vix": 0.0, "regime": "unclear"}
+        context = {"spy": {}, "qqq": {}, "regime": "unclear"}
 
         for sym, key in [("SPY", "spy"), ("QQQ", "qqq")]:
             try:
@@ -118,28 +118,20 @@ def get_market_context() -> dict:
             except Exception:
                 pass
 
-        try:
-            vix_data = yf.download("^VIX", period="2d", progress=False)
-            if not vix_data.empty:
-                context["vix"] = float(vix_data["Close"].iloc[-1])
-        except Exception:
-            pass
-
-        # Regime inference
+        # Regime inference from SPY/QQQ trend only
         spy_trend = context["spy"].get("trend", "")
         qqq_trend = context["qqq"].get("trend", "")
-        vix = context["vix"]
         if spy_trend == "UP" and qqq_trend == "UP":
-            context["regime"] = "risk_on" if vix < 20 else "choppy_bull"
+            context["regime"] = "risk_on"
         elif spy_trend == "DOWN" and qqq_trend == "DOWN":
-            context["regime"] = "risk_off" if vix > 20 else "mild_pullback"
+            context["regime"] = "risk_off"
         else:
             context["regime"] = "mixed"
 
         return context
     except Exception as e:
         print(f"[claude_analyst] market_context error: {e}")
-        return {"spy": {}, "qqq": {}, "vix": 0.0, "regime": "unclear"}
+        return {"spy": {}, "qqq": {}, "regime": "unclear"}
 
 
 # ── Chart encoding ────────────────────────────────────────────────────────────
@@ -257,7 +249,6 @@ def _format_raw_data(candidate: dict, market_context: dict, scan_rank: int = 0) 
     # ── Market context ────────────────────────────────────────────────────────
     spy = market_context.get("spy", {})
     qqq = market_context.get("qqq", {})
-    vix = market_context.get("vix", 0)
 
     # ── Technical metrics ─────────────────────────────────────────────────────
     ma20 = yf.get("ma20")
@@ -321,7 +312,6 @@ def _format_raw_data(candidate: dict, market_context: dict, scan_rank: int = 0) 
         f"── MARKET CONTEXT ────────────────────────────────────",
         f"  SPY:  ${spy.get('price', 0):.2f} | GEX: {spy.get('gex_regime', 'N/A')} | Flip: ${spy.get('gex_flip', 0):.2f} | Trend: {spy.get('trend', 'N/A')}",
         f"  QQQ:  ${qqq.get('price', 0):.2f} | GEX: {qqq.get('gex_regime', 'N/A')} | Flip: ${qqq.get('gex_flip', 0):.2f} | Trend: {qqq.get('trend', 'N/A')}",
-        f"  VIX:  {vix:.2f}",
         f"  Regime: {market_context.get('regime', 'N/A')}",
         f"═══════════════════════════════════════════════════",
     ]

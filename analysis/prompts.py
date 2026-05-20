@@ -23,7 +23,7 @@ GEX/DEX STRUCTURE:
 - Negative GEX regime = dealers chase price, moves extend. Best trending setups here.
 - Positive GEX regime = dealers dampen moves. Expect chop unless there's a big catalyst.
 - DEX bias = directional lean of dealer delta exposure. Strong DEX = dealers need to hedge in that direction = momentum fuel.
-- VEX = vanna exposure. Rising VIX + negative vanna = dealers sell, amplifies downside.
+- VEX = vanna exposure. Negative vanna = dealers sell into weakness, amplifies downside.
 
 PRICE ACTION + STRUCTURE:
 - Look at the actual OHLCV bars. What is price doing? Is it trending, ranging, compressing?
@@ -37,9 +37,8 @@ NEWS + CATALYST:
 - Absence of news + weird volume = someone knows something. Treat as signal.
 
 MARKET CONTEXT:
-- Don't fight the market regime. Risk-off + high VIX = only the best setups, smaller size.
+- Don't fight the market regime. Risk-off = only the best setups, smaller size.
 - SPY/QQQ GEX regime affects everything. Negative SPY GEX = trending day, setups work better.
-- VIX > 25 = widen stops, lower targets, or skip low-confidence setups.
 
 PAST LEARNINGS ARE MANDATORY:
 You MUST explicitly reference what past trades have taught you. Quote or paraphrase specific lessons from the learnings block. If no learnings exist yet, say so. If a learning is directly relevant, cite it by ticker and date.

@@ -305,7 +305,7 @@ def _build_mention_context() -> str:
         lines.append(
             f"SPY ${spy.get('price', 0):.2f} GEX:{spy.get('gex_regime','?')} | "
             f"QQQ ${qqq.get('price', 0):.2f} GEX:{qqq.get('gex_regime','?')} | "
-            f"VIX {ctx.get('vix', 0):.1f} | Regime: {ctx.get('regime','?')}"
+            f"Regime: {ctx.get('regime','?')}"
         )
     except Exception:
         pass
@@ -458,7 +458,7 @@ async def market_scan():
     spy = market_ctx.get("spy", {})
     await channel.send(
         f"🔍 **Scan** — SPY ${spy.get('price', 0):.2f} {spy.get('gex_regime','?').upper()} GEX | "
-        f"VIX {market_ctx.get('vix', 0):.1f} | Regime: {market_ctx.get('regime','?')}\n"
+        f"Regime: {market_ctx.get('regime','?')}\n"
         f"Analyzing: `{tickers_str}`"
     )
 
