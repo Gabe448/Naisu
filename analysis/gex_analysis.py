@@ -128,8 +128,11 @@ def analyze_exposure(ticker: str) -> dict:
 
     vex_regime = "positive" if total_vex > 0 else ("negative" if total_vex < 0 else "neutral")
 
-    king_above = raw.get("king_above")
-    king_below = raw.get("king_below")
+    # LuminaFlow returns king_above/king_below as dicts: {"strike": 738, "gex": 268062921}
+    king_above_raw = raw.get("king_above")
+    king_below_raw = raw.get("king_below")
+    king_above = king_above_raw.get("strike") if isinstance(king_above_raw, dict) else king_above_raw
+    king_below = king_below_raw.get("strike") if isinstance(king_below_raw, dict) else king_below_raw
 
     # Sort strikes by GEX to derive walls
     strikes_raw = raw.get("strikes", [])
