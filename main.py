@@ -1,107 +1,87 @@
 """
-main.py — entry point for the Swing Trading Analyst Bot.
+main.py — Orchestrates the core loop.
 
-Usage:
-  python main.py              # run the Discord bot
-  python main.py --dashboard  # run the web dashboard at localhost:5000
-  python main.py --scan       # one-shot watchlist scan, print to console
-  python main.py --brief      # print morning brief to console (no Discord)
-  python main.py --weekly     # write weekly review to Obsidian now
+Loop: every 10 minutes during market hours
+  1. scanner.py   → top 10 S&P 500 candidates
+  2. analysis.py  → Claude decides SIGNAL / WATCHLIST / SKIP
+  3. discord_bot  → post signals and watchlist items
+  4. memory.py    → write Obsidian notes
 """
-import argparse
-import sys
+
+import time
+import os
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
 
+import scanner
+import analysis
+import discord_bot
+import memory
 
-def run_bot():
-    from discord_bot.bot import run
-    run()
+SCAN_INTERVAL_MINUTES = 10
+MARKET_OPEN_ET = 9   # 9:30 ET — approximate, good enough
+MARKET_CLOSE_ET = 16  # 4:00 PM ET
 
 
-def run_scan():
-    from analysis.signal_builder import scan_watchlist
-    from analysis.chart_renderer import render_chart
+def _is_market_hours() -> bool:
+    """Rough check — NYSE market hours in US/Eastern."""
+    now_utc = datetime.now(timezone.utc)
+    # ET = UTC-5 (EST) or UTC-4 (EDT) — use UTC-4 as approximation
+    now_et = now_utc - timedelta(hours=4)
+    if now_et.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    return MARKET_OPEN_ET <= now_et.hour < MARKET_CLOSE_ET
 
-    print("=" * 60)
-    print("SWING TRADE SCANNER")
-    print("=" * 60)
 
-    signals = scan_watchlist()
-    if not signals:
-        print("No high-conviction setups found on current watchlist.")
+def run_once():
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Starting scan...")
+
+    candidates = scanner.run_scan()
+    if not candidates:
+        print("  No candidates passed filters.")
         return
 
-    print(f"\n{len(signals)} signal(s) found:\n")
-    for sig in signals:
-        direction = sig["direction"].upper()
-        print(f"  {sig['ticker']:6} {direction:5} | Score: {sig['conviction_score']}/100 "
-              f"| R:R: {sig['rr_ratio']}:1 | Entry: ${sig['entry']} "
-              f"| Stop: ${sig['stop']} | Target: ${sig['target']}")
-        print(f"         GEX: {sig['gex_regime']} | Flow: {sig['flow_bias']} "
-              f"| Flip: ${sig.get('gex_flip', '?')}")
-        print(f"  Thesis: {sig['thesis'][:120]}...")
-        print()
+    print(f"  {len(candidates)} candidates found: {[c['ticker'] for c in candidates]}")
+
+    decisions = analysis.analyze(candidates)
+    if not decisions:
+        print("  Analysis returned no decisions.")
+        return
+
+    signals = [d for d in decisions if d.get("decision") == "SIGNAL"]
+    watchlist = [d for d in decisions if d.get("decision") == "WATCHLIST"]
+
+    print(f"  Signals: {[d['ticker'] for d in signals]}")
+    print(f"  Watchlist: {[d['ticker'] for d in watchlist]}")
+
+    # Post to Discord
+    discord_bot.post(decisions, candidates)
+
+    # Write Obsidian notes
+    scan_map = {c["ticker"]: c for c in candidates}
+    for d in signals:
+        memory.write_signal(d, scan_map.get(d["ticker"], {}))
+    for d in watchlist:
+        memory.write_watchlist(d, scan_map.get(d["ticker"], {}))
 
 
-def run_brief():
-    from analysis.position_manager import get_position_summary
-    from analysis.morning_brief import build_morning_brief
+def main():
+    print("Trading Bot starting...")
+    print(f"Scan interval: every {SCAN_INTERVAL_MINUTES} minutes during market hours\n")
 
-    print("=" * 60)
-    print("MORNING BRIEF")
-    print("=" * 60)
+    while True:
+        if _is_market_hours():
+            try:
+                run_once()
+            except Exception as e:
+                print(f"[ERROR] {e}")
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Market closed — sleeping...")
 
-    positions = get_position_summary()
-    if not positions:
-        print("No open positions.\n")
-    else:
-        for pos in positions:
-            pnl  = pos.get("pnl_pct", 0)
-            days = pos.get("days_held", 0)
-            print(f"  {pos['ticker']:6} {pos['direction'].upper()} | "
-                  f"Entry: ${pos['entry_price']} | Current: ${pos['current_price']} | "
-                  f"PnL: {pnl:+.2f}% | Day {days}")
-            print(f"         Stop: ${pos['stop_price']} | Target: ${pos['target_price']}")
-            print()
-
-
-def run_weekly():
-    from memory.position_store import get_weekly_stats, get_open_positions
-    from memory.obsidian_writer import write_weekly_review
-
-    stats   = get_weekly_stats()
-    open_ps = get_open_positions()
-    write_weekly_review(stats, open_ps)
-    print(f"Weekly review written.")
-    print(f"  Trades:    {stats.get('trades', 0)}")
-    print(f"  Win Rate:  {stats.get('win_rate', 0)}%")
-    print(f"  Avg Win:   {stats.get('avg_win', 0):+.2f}%")
-    print(f"  Avg Loss:  {stats.get('avg_loss', 0):+.2f}%")
+        time.sleep(SCAN_INTERVAL_MINUTES * 60)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Swing Trading Analyst Bot")
-    parser.add_argument("--scan",      action="store_true", help="One-shot watchlist scan")
-    parser.add_argument("--brief",     action="store_true", help="Morning brief to console")
-    parser.add_argument("--weekly",    action="store_true", help="Write weekly review now")
-    parser.add_argument("--dashboard", action="store_true", help="Run web dashboard at localhost:5000")
-    parser.add_argument("--port",      type=int, default=5000, help="Dashboard port (default 5000)")
-    args = parser.parse_args()
-
-    if args.scan:
-        run_scan()
-    elif args.brief:
-        run_brief()
-    elif args.weekly:
-        run_weekly()
-    elif args.dashboard:
-        import threading, webbrowser
-        from dashboard.app import app
-        port = args.port
-        print(f"Dashboard running at http://localhost:{port}")
-        threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-        app.run(host="0.0.0.0", port=port, debug=False)
-    else:
-        run_bot()
+    main()
