@@ -1,8 +1,8 @@
 anthropic
-yfinance
 pandas
-numpy
 requests
 python-dotenv
 discord.py
 aiohttp
+lxml
+html5lib
